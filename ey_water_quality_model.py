@@ -8,8 +8,16 @@
 # 3. Build spectral indices + seasonal cyclical features
 # 4. Pre-compute or load cached EfficientNet-B0 128-dim patch embeddings
 # 5. Train MultiOutputRegressor XGBoost with GroupKFold (station-aware CV)
-# 6. Generate submission CSV with inverse log1p transform
+# 6. Generate submission CSV with metadata columns and inverse log1p transform
 # 7. SHAP explainability on final model
+#
+# **Submission Format (7-column CSV):**
+# - Column 1: `ID` — Validation sample identifier
+# - Column 2: `Latitude` — Geographic latitude coordinate from template
+# - Column 3: `Longitude` — Geographic longitude coordinate from template
+# - Column 4: `Sample Date` — Temporal anchor from template (YYYY-MM-DD format)
+# - Columns 5–7: `TOTAL_ALKALINITY` (mg/L CaCO₃), `EC` (μS/cm), `DRP` (μg/L)
+# - All predictions are inverse-transformed via np.expm1() to original physical units
 #
 # **⚠️ Important — Run these TWO official notebooks BEFORE this one:**
 # - `LANDSAT_DATA_EXTRACTION_NOTEBOOK_SNOWFLAKE.ipynb`
@@ -80,8 +88,9 @@ def load_and_transform_data():
         n_train, n_val = 1000, 200
         train_df = pd.DataFrame({
             'ID': range(n_train),
-            'lon': np.random.uniform(-180, 180, n_train),
-            'lat': np.random.uniform(-90, 90, n_train),
+            'Longitude': np.random.uniform(-180, 180, n_train),
+            'Latitude': np.random.uniform(-90, 90, n_train),
+            'Sample Date': pd.date_range(start='2020-01-01', periods=n_train, freq='D').strftime('%Y-%m-%d'),
             'TOTAL_ALKALINITY': np.random.uniform(50, 300, n_train),
             'EC': np.random.uniform(100, 2000, n_train),
             'DRP': np.random.uniform(0.1, 5, n_train),
@@ -89,8 +98,9 @@ def load_and_transform_data():
         })
         val_df = pd.DataFrame({
             'ID': range(n_train, n_train + n_val),
-            'lon': np.random.uniform(-180, 180, n_val),
-            'lat': np.random.uniform(-90, 90, n_val),
+            'Longitude': np.random.uniform(-180, 180, n_val),
+            'Latitude': np.random.uniform(-90, 90, n_val),
+            'Sample Date': pd.date_range(start='2024-01-01', periods=n_val, freq='D').strftime('%Y-%m-%d'),
         })
     
     # Log transform targets
@@ -201,14 +211,22 @@ X_test = val_df[feature_cols]
 # Predict on log scale
 log_preds = model.predict(X_test)
 
-# Inverse-log back to original scale: e^y' - 1
+# Inverse-log back to original scale: np.expm1(y) = e^y - 1
+# This reverses the log1p transformation applied during preprocessing
+# Required to convert EC and DRP back to physical units (μS/cm, μg/L)
 orig_preds = np.expm1(log_preds)
 
 submission_df = pd.DataFrame(orig_preds, columns=TARGETS)
-submission_df['ID'] = val_df['ID'].values if 'ID' in val_df.columns else range(len(val_df))
 
-# Standardize layout per EY competition guidelines
-submission_df = submission_df[['ID'] + TARGETS]
+# Add identifiers from validation set
+submission_df['ID'] = val_df['ID'].values if 'ID' in val_df.columns else range(len(val_df))
+submission_df['Latitude'] = val_df['Latitude'].values if 'Latitude' in val_df.columns else val_df['lat'].values
+submission_df['Longitude'] = val_df['Longitude'].values if 'Longitude' in val_df.columns else val_df['lon'].values
+submission_df['Sample Date'] = val_df['Sample Date'].values if 'Sample Date' in val_df.columns else pd.Timestamp.now().strftime('%Y-%m-%d')
+
+# Reorder columns per EY competition template requirements
+# Required order: ID, Latitude, Longitude, Sample Date, TOTAL_ALKALINITY, EC, DRP
+submission_df = submission_df[['ID', 'Latitude', 'Longitude', 'Sample Date', 'TOTAL_ALKALINITY', 'EC', 'DRP']]
 
 # Save to local CSV
 submission_path = '/home/ciarrai/Documents/Ey AI Challenge/submission_ey_water_quality.csv'
