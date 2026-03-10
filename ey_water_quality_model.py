@@ -228,10 +228,20 @@ submission_df['Sample Date'] = val_df['Sample Date'].values if 'Sample Date' in 
 # Required order: ID, Latitude, Longitude, Sample Date, TOTAL_ALKALINITY, EC, DRP
 submission_df = submission_df[['ID', 'Latitude', 'Longitude', 'Sample Date', 'TOTAL_ALKALINITY', 'EC', 'DRP']]
 
-# Save to local CSV
-submission_path = '/home/ciarrai/Documents/Ey AI Challenge/submission_ey_water_quality.csv'
-submission_df.to_csv(submission_path, index=False)
-print(f"Submission saved: {submission_path}")
+# Rename columns to match the official EY submission template exactly
+submission_df = submission_df.rename(columns={
+    'TOTAL_ALKALINITY': 'Total Alkalinity',
+    'EC': 'Electrical Conductance',
+    'DRP': 'Dissolved Reactive Phosphorus'
+})
+
+# Ensure the columns are in the correct order as per the template
+submission_df = submission_df[['ID', 'Latitude', 'Longitude', 'Sample Date', 'Total Alkalinity', 'Electrical Conductance', 'Dissolved Reactive Phosphorus']]
+
+# Save the corrected file
+submission_path_v2 = '/home/ciarrai/Documents/Ey AI Challenge/submission_ey_water_quality_v2.csv'
+submission_df.to_csv(submission_path_v2, index=False)
+print(f"Submission saved: {submission_path_v2}")
 print(f"Shape: {submission_df.shape}")
 print("\nSample predictions (first 5 rows):")
 print(submission_df.head())
