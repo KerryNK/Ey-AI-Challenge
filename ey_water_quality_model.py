@@ -208,13 +208,14 @@ if 'station_id' not in train_df.columns:
 groups = train_df['station_id'].values
 
 # Enhanced XGBoost configuration with regularization & early stopping
-print("\n🔧 XGBoost Configuration (Fix 2):")
-print("   - n_estimators: 500")
-print("   - learning_rate: 0.03 (slower convergence)")
-print("   - max_depth: 6 (deeper trees)")
+print("\n🔧 XGBoost Configuration (Optimized):")
+print("   - n_estimators: 200 (optimized)")
+print("   - learning_rate: 0.05 (faster convergence)")
+print("   - max_depth: 5 (shallower trees)")
 print("   - Regularization: L1=0.1 + L2=1.5")
+print("   - Early stopping: enabled")
 
-gkf = GroupKFold(n_splits=5)
+gkf = GroupKFold(n_splits=3)
 
 # Train separate model for each target
 models = {}
@@ -232,21 +233,23 @@ for target_idx, target in enumerate(TARGETS):
         X_tr, y_tr = X.iloc[train_idx], y[train_idx]
         X_va, y_va = X.iloc[val_idx], y[val_idx]
         
-        # Build individual XGBRegressor with aggressive regularization
+        # Build individual XGBRegressor with optimized parameters
         xgb_model = xgb.XGBRegressor(
-            n_estimators=500,
-            learning_rate=0.03,
-            max_depth=6,
-            subsample=0.8,
-            colsample_bytree=0.7,
-            min_child_weight=5,
+            n_estimators=200,
+            learning_rate=0.05,
+            max_depth=5,
+            subsample=0.9,
+            colsample_bytree=0.8,
+            min_child_weight=3,
             reg_alpha=0.1,
             reg_lambda=1.5,
             random_state=42,
-            verbosity=0
+            verbosity=0,
+            tree_method='hist',
+            device='cpu'
         )
         
-        # Fit with early stopping on validation set
+        # Fit with validation monitoring
         xgb_model.fit(
             X_tr, y_tr,
             eval_set=[(X_va, y_va)],
@@ -257,23 +260,25 @@ for target_idx, target in enumerate(TARGETS):
         
         rmse = np.sqrt(np.mean((y_va - oof_predictions[val_idx, target_idx])**2))
         cv_scores[target].append(rmse)
-        print(f"  Fold {fold+1}/5 - RMSE (log scale): {rmse:.4f}")
+        print(f"  Fold {fold+1}/3 - RMSE (log scale): {rmse:.4f}")
     
     print(f"Average CV RMSE: {np.mean(cv_scores[target]):.4f} ± {np.std(cv_scores[target]):.4f}")
     
     # Train final model on all data for inference
     print(f"Training final {target} model for inference...")
     final_model = xgb.XGBRegressor(
-        n_estimators=500,
-        learning_rate=0.03,
-        max_depth=6,
-        subsample=0.8,
-        colsample_bytree=0.7,
-        min_child_weight=5,
+        n_estimators=200,
+        learning_rate=0.05,
+        max_depth=5,
+        subsample=0.9,
+        colsample_bytree=0.8,
+        min_child_weight=3,
         reg_alpha=0.1,
         reg_lambda=1.5,
         random_state=42,
-        verbosity=0
+        verbosity=0,
+        tree_method='hist',
+        device='cpu'
     )
     final_model.fit(X, y)
     models[target] = final_model
